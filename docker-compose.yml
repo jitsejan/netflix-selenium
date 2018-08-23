@@ -1,0 +1,24 @@
+version: '3'
+services:
+  netflix-selenium:
+    image: jitsejan/netflix-selenium 
+    command: ./wait-for-it.sh -t 15 selenium:4444 -- python main.py
+    environment:
+    - DEBUG=1
+    depends_on:
+      - selenium
+    volumes:
+      - ./output:/app/output
+    networks:
+      netflix-selenium-nw: {}
+
+  selenium:
+    image: selenium/standalone-chrome
+    networks:
+      netflix-selenium-nw: {}
+    ports:
+    - 4444:4444
+
+networks:
+  netflix-selenium-nw:
+    driver: bridge
