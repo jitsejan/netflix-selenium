@@ -2,7 +2,6 @@
 import os
 import re
 import pandas as pd
-import time
 import sys
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -11,23 +10,24 @@ from selenium.webdriver.chrome.options import Options
 from argparse import ArgumentParser
 
 parser = ArgumentParser(description='Get or set "My List" from Netflix account provided to script')
-parser.add_argument('--action',help='provide "set" to update Netflix My List from csv or "get" to download data to csv')
-parser.add_argument('--account', help='Netflix account to be used with script')
+parser.add_argument('--action', choices=["get", "set"], type=str.lower, help='provide "set" to update Netflix My List '
+                                                                             'from csv or "get" to download data to csv')
+parser.add_argument('--profile', help='Netflix profile to be used with script')
 
 args = parser.parse_args()
 
-ACTION=args.action
+ACTION = args.action
 
-print(os.environ)
 if "NETFLIX_USER" and "NETFLIX_PASS" not in os.environ:
     print("Please set environment variables for NETFLIX_USER AND NETFLIX_PASS")
     sys.exit(0)
 
 USERNAME = os.environ["NETFLIX_USER"]
 PASSWORD = os.environ["NETFLIX_PASS"]
-ACCOUNT = args.account
+PROFILE = args.profile
 URL = "https://www.netflix.com/browse/my-list"
 REGEX = r"https://www.netflix.com/watch/(.*?)\?tctx"
+CHROME_DRIVER = "/path/to/chromedriver"
 
 
 def login(browser):
@@ -47,12 +47,12 @@ def login(browser):
     login_button.click()
 
 
-def profileselect(browser, account):
+def profileselect(browser, profile):
     print("profile select")
     print(browser.current_url)
     try:
-        time.sleep(2)
-        profile_button = browser.find_element_by_xpath(f"//span[@class='profile-name' and contains(text(),'{account}')]")
+        browser.implicitly_wait(2)
+        profile_button = browser.find_element_by_xpath(f"//span[@class='profile-name' and contains(text(),'{profile}')]")
         profile_button.click()
     except Exception as e:
         print(e)
@@ -61,8 +61,10 @@ def profileselect(browser, account):
 
 def get_favorites(browser):
     print("get favourites..")
-    items = []
     print(browser.find_elements_by_class_name('ptrack-content'))
+    browser.get(URL)
+    browser.implicitly_wait(2)
+    items = []
     for elem in browser.find_elements_by_class_name('ptrack-content'):
         item = {
             'title': elem.find_element_by_class_name('slider-refocus').get_attribute('aria-label'),
@@ -71,6 +73,8 @@ def get_favorites(browser):
         item['id'] = re.search(REGEX, item['viewlink']).group(1)
         item['infolink'] = f"https://www.netflix.com/title/{item['id']}"
         items.append(item)
+        if not os.path.exists('output'):
+            os.makedirs('output')
     pd.DataFrame(items).to_csv('output/items.csv', index=False)
 
 
@@ -82,7 +86,7 @@ def set_favorites(browser):
         try:
             browser.get(elem)
             list_button = browser.find_elements_by_class_name('nf-icon-button')[-1]
-            time.sleep(1)
+            browser.implicitly_wait(1)
             list_button.click()
         except Exception as e:
             print("Failed", e)
@@ -92,15 +96,15 @@ def main():
     # browser = webdriver.Remote("http://selenium:4444/wd/hub", DesiredCapabilities.CHROME)
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    browser = webdriver.Chrome("/path/to/your/chromedriver", options=chrome_options)
+    browser = webdriver.Chrome(CHROME_DRIVER, options=chrome_options)
     print("Running Netflix Selenium")
     browser.get(URL)
     login(browser)
-    profileselect(browser, ACCOUNT)
+    profileselect(browser, PROFILE)
 
     if ACTION == "set":
         set_favorites(browser)
-    else:
+    elif ACTION == "get":
         get_favorites(browser)
 
     browser.quit()
